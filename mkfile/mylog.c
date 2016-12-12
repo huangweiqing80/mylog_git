@@ -20,17 +20,19 @@
 #define BUF_SIZE 1000
 #define Log_Path "/home/Log_hwq/"
 #define KLOG_SIZE_BUFFER   10
+#define Maxinum 1024*5
 
 char new_file[50];
 char buf[BUF_SIZE];
 void makeFile();
 void *write_log(void *arg);
+int filesize_ctl();
 
-
+int file_num = 0;
 
 void *write_log(void *arg)
 {
-	int readSize = 0,saveSize = 0;
+	int readSize = 0,saveSize = 0,filesize = 0;
 	int klog_buf_len = 0;
 	int open_fd;
 	makeFile();
@@ -42,7 +44,7 @@ void *write_log(void *arg)
         		perror("klogctl no dataup");
     		}*/
 		readSize = klogctl(2,buf+saveSize,BUF_SIZE-saveSize);
-		printf("%d\n",readSize);
+		//printf("%d\n",readSize);
 		//write(open_fd,buf,BUF_SIZE);
 		if(0>=readSize)
 			perror("klogctl error");
@@ -60,6 +62,19 @@ void *write_log(void *arg)
 				memset(buf,0,sizeof(buf));
 			}
 		}
+	sleep(1);
+	filesize = filesize_ctl();
+	if(filesize > Maxinum)
+	{
+		if(file_num == 1)
+		{
+			
+			lseek(open_fd,0,SEEK_SET);
+		}
+		else
+		system("rm /home/Log_hwq/$(ls /home/Log_hwq/ -rt | sed -n '1p')");
+	}
+	file_num = 0;
 	}
 }
 void makeFile()
@@ -82,11 +97,66 @@ void makeFile()
 	int fd_newfile = creat(new_file,777);//创建目标文件
 }
 
+int filesize_ctl()
+{
+	int fd;
+	DIR *d;
+	struct dirent *de;
+	struct stat file_buf;
+	int exists;
+	int total_size;
+	
+
+	
+	/********计算文件夹大小***********/
+	//while(1)
+	//{
+	char *filename = (char *)malloc(50*sizeof(char));
+	d = opendir(Log_Path);
+	if(d == NULL)
+	{
+		perror("prsize");
+		exit(1);
+	}
+
+	total_size = 0;
+	while((de = readdir(d))!=NULL)
+	{
+		if(strncmp(de->d_name,".",1) == 0)//跳过目录.和..
+			continue;
+		sprintf(filename,"%s%s",Log_Path,de->d_name);
+		//printf("%s",filename);
+		exists = stat(filename,&file_buf);
+		if(exists < 0)
+		{
+			fprintf(stderr,"Could not stat %s\n",de->d_name);
+		}
+		else
+		total_size += file_buf.st_size;
+		//printf("totalsize:%d",total_size);
+		file_num++;
+
+	}
+	
+	printf("totalsize:%d",total_size);
+	printf("file_num:%d",file_num);
+
+
+	sleep(1);
+	free(filename);
+	closedir(d);
+	close(fd);
+	return total_size;
+	//}
+}
+
 int main()
 {
-	pthread_t writelog_tid;
+	pthread_t writelog_tid,filesize_tid;
 	pthread_create(&writelog_tid,NULL,write_log,NULL);
+	//pthread_create(&filesize_tid,NULL,filesize_ctl,NULL);
 	pthread_join(writelog_tid,NULL);
+	//pthread_join(filesize_tid,NULL);
 	return 0;
 }
 
