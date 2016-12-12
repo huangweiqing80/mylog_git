@@ -33,7 +33,7 @@ int file_num = 0;
 void *write_log(void *arg)
 {
 	int readSize = 0,saveSize = 0,filesize = 0;
-	int klog_buf_len = 0;
+	//int klog_buf_len = 0;
 	int open_fd;
 	makeFile();
 	open_fd = open(new_file,O_RDWR | O_CREAT,0755);
@@ -49,8 +49,7 @@ void *write_log(void *arg)
 		if(0>=readSize)
 			perror("klogctl error");
 		else
-		{
-			
+		{			
 			saveSize += readSize; 
 			if(saveSize>=BUF_SIZE)
 			{
@@ -60,21 +59,22 @@ void *write_log(void *arg)
 				readSize = 0;
 				saveSize = 0;
 				memset(buf,0,sizeof(buf));
+			
+				filesize = filesize_ctl();
+				if(filesize > Maxinum)
+				{
+				if(file_num == 1)
+				{
+			
+					lseek(open_fd,0,SEEK_SET);
+				}
+				else
+				system("rm /home/Log_hwq/$(ls /home/Log_hwq/ -rt | sed -n '1p')");
+				}
+				file_num = 0;
+				sleep(1);
 			}
 		}
-	sleep(1);
-	filesize = filesize_ctl();
-	if(filesize > Maxinum)
-	{
-		if(file_num == 1)
-		{
-			
-			lseek(open_fd,0,SEEK_SET);
-		}
-		else
-		system("rm /home/Log_hwq/$(ls /home/Log_hwq/ -rt | sed -n '1p')");
-	}
-	file_num = 0;
 	}
 }
 void makeFile()
@@ -152,11 +152,11 @@ int filesize_ctl()
 
 int main()
 {
-	pthread_t writelog_tid,filesize_tid;
+	pthread_t writelog_tid,signal_tid;
 	pthread_create(&writelog_tid,NULL,write_log,NULL);
-	//pthread_create(&filesize_tid,NULL,filesize_ctl,NULL);
+	//pthread_create(&signal_tid,NULL,signal_ctl,NULL);
 	pthread_join(writelog_tid,NULL);
-	//pthread_join(filesize_tid,NULL);
+	//pthread_join(signal_tid,NULL);
 	return 0;
 }
 
