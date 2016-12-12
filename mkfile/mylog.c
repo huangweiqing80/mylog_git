@@ -17,11 +17,15 @@
 
 #include <pthread.h>
 
-#define BUF_SIZE 1000
+#include <signal.h>
+
+#define BUF_SIZE 1024*5
 #define Log_Path "/home/Log_hwq/"
 #define KLOG_SIZE_BUFFER   10
 #define Maxinum 1024*5
 
+int open_fd;
+int readSize = 0,saveSize = 0;
 char new_file[50];
 char buf[BUF_SIZE];
 void makeFile();
@@ -32,19 +36,11 @@ int file_num = 0;
 
 void *write_log(void *arg)
 {
-	int readSize = 0,saveSize = 0,filesize = 0;
-	//int klog_buf_len = 0;
-	int open_fd;
-	makeFile();
-	open_fd = open(new_file,O_RDWR | O_CREAT,0755);
+	int filesize = 0;	
 	while(1)
 	{
-		/*klog_buf_len = klogctl(KLOG_SIZE_BUFFER , 0, 0);
-		if (klog_buf_len <= 0) {
-        		perror("klogctl no dataup");
-    		}*/
 		readSize = klogctl(2,buf+saveSize,BUF_SIZE-saveSize);
-		//printf("%d\n",readSize);
+		printf("%d\n",readSize);
 		//write(open_fd,buf,BUF_SIZE);
 		if(0>=readSize)
 			perror("klogctl error");
@@ -54,7 +50,7 @@ void *write_log(void *arg)
 			if(saveSize>=BUF_SIZE)
 			{
 				//write_logfile();
-				write(open_fd,buf,BUF_SIZE);
+				write(open_fd,buf,saveSize);
 				printf("now write log to file\n");
 				readSize = 0;
 				saveSize = 0;
@@ -150,13 +146,51 @@ int filesize_ctl()
 	//}
 }
 
+
+void mysig_func(int a)
+{
+	write(open_fd,buf,saveSize);
+	printf("now write log to file\n");
+	readSize = 0;
+	saveSize = 0;
+	memset(buf,0,sizeof(buf));
+			
+	int filesize = filesize_ctl();
+	if(filesize > Maxinum)
+	{
+		if(file_num == 1)
+		{
+			
+		lseek(open_fd,0,SEEK_SET);
+		}
+		else
+		system("rm /home/Log_hwq/$(ls /home/Log_hwq/ -rt | sed -n '1p')");
+	}
+	file_num = 0;
+	sleep(1);
+}
+
+
+void *signal_ctl(void *arg)
+{
+	while(1)
+	{
+		signal(SIGINT,mysig_func);
+		pause();
+	}
+}
 int main()
 {
 	pthread_t writelog_tid,signal_tid;
+
+	
+	makeFile();
+	open_fd = open(new_file,O_RDWR | O_CREAT,0755);
+	
 	pthread_create(&writelog_tid,NULL,write_log,NULL);
-	//pthread_create(&signal_tid,NULL,signal_ctl,NULL);
+	pthread_create(&signal_tid,NULL,signal_ctl,NULL);
 	pthread_join(writelog_tid,NULL);
-	//pthread_join(signal_tid,NULL);
+	pthread_join(signal_tid,NULL);
 	return 0;
 }
 
