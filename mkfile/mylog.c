@@ -19,30 +19,31 @@
 
 #include <signal.h>
 
-#define BUF_SIZE 1024*5
+#define BUF_SIZE 500
 #define Log_Path "/home/Log_hwq/"
 #define KLOG_SIZE_BUFFER   10
-#define Maxinum 1024*5
+#define Maxinum 1024*10
 
 int open_fd;
 int readSize = 0,saveSize = 0;
 char new_file[50];
-char buf[BUF_SIZE];
+//char buf[BUF_SIZE];
+char * buf;
 void makeFile();
-void *write_log(void *arg);
+void write_log(char *buf);
 int filesize_ctl();
 
 int file_num = 0;
 
-void *write_log(void *arg)
+void write_log(char *buf)
 {
 	int filesize = 0;	
 	while(1)
 	{
 		readSize = klogctl(2,buf+saveSize,BUF_SIZE-saveSize);
-		printf("%d\n",readSize);
+		printf("read %d\n",readSize);
 		//write(open_fd,buf,BUF_SIZE);
-		if(0>=readSize)
+		if(0>readSize)
 			perror("klogctl error");
 		else
 		{			
@@ -50,11 +51,12 @@ void *write_log(void *arg)
 			if(saveSize>=BUF_SIZE)
 			{
 				//write_logfile();
-				write(open_fd,buf,saveSize);
 				printf("now write log to file\n");
+				write(open_fd,buf,saveSize);
+				
 				readSize = 0;
 				saveSize = 0;
-				memset(buf,0,sizeof(buf));
+				memset(buf,0,sizeof(BUF_SIZE));
 			
 				filesize = filesize_ctl();
 				if(filesize > Maxinum)
@@ -65,8 +67,12 @@ void *write_log(void *arg)
 					lseek(open_fd,0,SEEK_SET);
 				}
 				else
+				{
 				system("rm /home/Log_hwq/$(ls /home/Log_hwq/ -rt | sed -n '1p')");
+				printf("remove one file\n");
 				}
+				}
+				
 				file_num = 0;
 				sleep(1);
 			}
@@ -78,7 +84,7 @@ void makeFile()
 	time_t ctime;
 	struct tm *tm;
 	
-	memset(buf,'\0',sizeof(buf));
+	//memset(buf,'\0',sizeof(buf));
 	umask(0);//屏蔽创建文件权限
 	int fd = mkdir(Log_Path,777);	
 	if((fd < 0) && (errno != EEXIST))
@@ -101,14 +107,17 @@ int filesize_ctl()
 	struct stat file_buf;
 	int exists;
 	int total_size;
+	char filename[50];
 	
 
 	
 	/********计算文件夹大小***********/
 	//while(1)
 	//{
-	char *filename = (char *)malloc(50*sizeof(char));
+	//char *filename = (char *)malloc(50*sizeof(char));
 	d = opendir(Log_Path);
+	
+	//d = opendir("/home/Log_hwq/");
 	if(d == NULL)
 	{
 		perror("prsize");
@@ -134,14 +143,15 @@ int filesize_ctl()
 
 	}
 	
-	printf("totalsize:%d",total_size);
-	printf("file_num:%d",file_num);
+	printf("totalsize:%d\n",total_size);
+	
 
 
-	sleep(1);
-	free(filename);
-	closedir(d);
+	//sleep(1);
+	//free(filename);
 	close(fd);
+	closedir(d);
+	//printf("hello");
 	return total_size;
 	//}
 }
@@ -170,27 +180,17 @@ void mysig_func(int a)
 	sleep(1);
 }
 
-
-void *signal_ctl(void *arg)
-{
-	while(1)
-	{
-		signal(SIGINT,mysig_func);
-		pause();
-	}
-}
 int main()
 {
-	pthread_t writelog_tid,signal_tid;
-
+	int filesize = 0;	
 	
 	makeFile();
+	buf = (char *)malloc((BUF_SIZE));
 	open_fd = open(new_file,O_RDWR | O_CREAT,0755);
-	
-	pthread_create(&writelog_tid,NULL,write_log,NULL);
-	pthread_create(&signal_tid,NULL,signal_ctl,NULL);
-	pthread_join(writelog_tid,NULL);
-	pthread_join(signal_tid,NULL);
+	signal(SIGINT,mysig_func);
+	write_log(buf);
+			
+	free(buf);
 	return 0;
 }
 
