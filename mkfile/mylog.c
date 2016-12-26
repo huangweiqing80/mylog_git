@@ -13,72 +13,77 @@
 #include <sys/klog.h>
 #include <signal.h>
 
-#define BUF_SIZE 1024*5
-#define Log_Path "/home/Log_hwq/"
-#define Maxinum 1024*10
+#define BUFSIZE 1024*100
+#define MAXINUM 1024*1024*10
+#define PATH "/home/Log_hwq/"
 
-int open_fd;
-int read_size = 0,save_size = 0;
+
+int openfd;
+int readsize = 0,savesize = 0;
 char * buf;
-int file_num = 0;
+int filenum = 0;
 
 
-void makeFile(char *new_file);
-void writeLog(char *buf);
-int fileSizeCtl();
+void makefile(char *newfile);
+void writelog(char *buf);
+int filesizectrl();
 
 
 
-void writeLog(char *buf)
+void writelog(char *buf)
 {
-	int file_size = 0;	
+	int filesize = 0;
+	char cmd[125];
 	while(1)
 	{
-		read_size = klogctl(2,buf+save_size,BUF_SIZE-save_size);
-		printf("read %d\n",read_size);
+		readsize = klogctl(2,buf+savesize,BUFSIZE-savesize);
+		printf("read %d\n",readsize);
 		
-		if(0>read_size)
+		if(0>readsize)
 			perror("klogctl error");
 		else
 		{			
-			save_size += read_size; 
-			if(save_size>=BUF_SIZE)
+			savesize += readsize; 
+			if(savesize>=BUFSIZE)
 			{
 				printf("now write log to file\n");
-				write(open_fd,buf,save_size);
+				write(openfd,buf,savesize);
 				
-				read_size = 0;
-				save_size = 0;
-				memset(buf,0,sizeof(BUF_SIZE));
+				readsize = 0;
+				savesize = 0;
+				memset(buf,0,sizeof(BUFSIZE));
 			
-				file_size = fileSizeCtl();
-				if(file_size > Maxinum)
+				filesize = filesizectrl();
+				if(filesize > MAXINUM)
 				{
-					if(file_num == 1)
+					if(filenum == 1)
 					{
 				
-						lseek(open_fd,0,SEEK_SET);
+						lseek(openfd,0,SEEK_SET);
 					}
 					else
 					{
-						system("rm /home/Log_hwq/$(ls /home/Log_hwq/ -rt | sed -n '1p')");
+						sprintf(cmd,"rm %s$(ls %s -rt | sed -n '1p')",PATH,PATH);
+						system(cmd);
 						printf("remove one file\n");
 					}
 				}
 				
-				file_num = 0;
-				sleep(1);
+				filenum = 0;
+				
 			}
 		}
+		sleep(1);
 	}
 }
-void makeFile(char *new_file)
+
+void makefile(char *newfile)
 {
 	time_t ctime;
 	struct tm *tm;
 	
 	umask(0);//屏蔽创建文件权限
-	int fd = mkdir(Log_Path,777);	
+	int fd = mkdir(PATH,777);	
 	if((fd < 0) && (errno != EEXIST))
 	{
 		perror("mkdir file erro");
@@ -87,25 +92,25 @@ void makeFile(char *new_file)
 	ctime = time(NULL);
 	
 	tm = localtime(&ctime);
-	sprintf(new_file,"%s%2.2d_%2.2d:%2.2d:%2.2d",Log_Path,tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);//将时间转换为字符串
-	int fd_newfile = creat(new_file,777);//创建目标文件
+	sprintf(newfile,"%s%2d_%2d_%2.2d-%2.2d:%2.2d:%2.2d",PATH,tm->tm_year+1900,tm->tm_mon+1,tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);//将时间转换为字符串
+	int newfilefd = creat(newfile,777);//创建目标文件
 }
 
-int fileSizeCtl()
+int filesizectrl()
 {
 	int fd;
 	DIR *d;
 	struct dirent *de;
-	struct stat file_buf;
+	struct stat filebuf;
 	int exists;
-	int total_size;
+	int totalsize;
 	char filename[50];
 	
 
 	
 	/********计算文件夹大小***********/
 
-	d = opendir(Log_Path);
+	d = opendir(PATH);
 	
 	if(d == NULL)
 	{
@@ -113,69 +118,70 @@ int fileSizeCtl()
 		exit(1);
 	}
 
-	total_size = 0;
+	totalsize = 0;
 	while((de = readdir(d))!=NULL)
 	{
 		if(strncmp(de->d_name,".",1) == 0)//跳过目录.和..
 			continue;
 			
-		sprintf(filename,"%s%s",Log_Path,de->d_name);
-		exists = stat(filename,&file_buf);
+		sprintf(filename,"%s%s",PATH,de->d_name);
+		exists = stat(filename,&filebuf);
 		if(exists < 0)
 		{
 			fprintf(stderr,"Could not stat %s\n",de->d_name);
 		}
 		else
-		total_size += file_buf.st_size;
+		totalsize += filebuf.st_size;
 	
-		file_num++;
+		filenum++;
 
 	}
 	
-	printf("totalsize:%d\n",total_size);
+	printf("totalsize:%d\n",totalsize);
 
 	close(fd);
 	closedir(d);
 
-	return total_size;
+	return totalsize;
 
 }
 
 
-void mySigFunc(int a)
+void sigfunc(int a)
 {
-	write(open_fd,buf,save_size);
+	char cmd[125];
+	write(openfd,buf,savesize);
 	printf("now write log to file\n");
-	read_size = 0;
-	save_size = 0;
-	memset(buf,0,sizeof(buf));
+	readsize = 0;
+	savesize = 0;
+	memset(buf,'\0',sizeof(buf));
 			
-	int file_size = fileSizeCtl();
-	if(file_size > Maxinum)
+	int filesize = filesizectrl();
+	if(filesize > MAXINUM)
 	{
-		if(file_num == 1)
-		{
-			
-		lseek(open_fd,0,SEEK_SET);
+		if(filenum == 1)
+		{			
+			lseek(openfd,0,SEEK_SET);
 		}
 		else
-		system("rm /home/Log_hwq/$(ls /home/Log_hwq/ -rt | sed -n '1p')");
+		{
+			sprintf(cmd,"rm %s$(ls %s -rt | sed -n '1p')",PATH,PATH);
+			system(cmd);
+		}
 	}
-	file_num = 0;
-	sleep(1);
+	filenum = 0;
 }
 
 int main()
 {
-	char *new_file = (char *)malloc(50 * sizeof(char));
-	makeFile(new_file);
-	buf = (char *)malloc((BUF_SIZE));
-	open_fd = open(new_file,O_RDWR | O_CREAT,0755);
-	signal(SIGINT,mySigFunc);
-	writeLog(buf);
+	char newfile[50];
+	makefile(newfile);
+	buf = (char *)malloc((BUFSIZE));
+	openfd = open(newfile,O_RDWR | O_CREAT,0755);
+	signal(SIGINT,sigfunc);
+	writelog(buf);
 			
 	free(buf);
-	free(new_file);
 	return 0;
 }
 
