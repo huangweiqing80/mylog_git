@@ -13,16 +13,17 @@
 #include <sys/klog.h>
 #include <signal.h>
 
-#define BUFSIZE 1024*100
-#define MAXINUM 1024*1024*10
+#define BUFSIZE 512
+#define MAXINUM 1024*3
 #define PATH "/home/Log_hwq/"
 
 
-int openfd;
+FILE *openfd;
 int readsize = 0,savesize = 0;
 char * buf;
 int filenum = 0;
-
+char newfile[50];
+long fileindex = 0;
 
 void makefile(char *newfile);
 void writelog(char *buf);
@@ -34,6 +35,7 @@ void writelog(char *buf)
 {
 	int filesize = 0;
 	char cmd[125];
+	
 	while(1)
 	{
 		readsize = klogctl(2,buf+savesize,BUFSIZE-savesize);
@@ -47,19 +49,26 @@ void writelog(char *buf)
 			if(savesize>=BUFSIZE)
 			{
 				printf("now write log to file\n");
-				write(openfd,buf,savesize);
-				
+                                openfd = fopen(newfile,"r+");
+                                fseek(openfd,fileindex,SEEK_SET);
+                                int writenum = fwrite(buf,1,savesize,openfd);
+                                printf("writenum is %d\n",writenum);
+                                fileindex = ftell(openfd);
+				fclose(openfd);
+
 				readsize = 0;
 				savesize = 0;
-				memset(buf,0,sizeof(BUFSIZE));
+				memset(buf,0,BUFSIZE);
 			
 				filesize = filesizectrl();
-				if(filesize > MAXINUM)
+				if(filesize >= MAXINUM)
 				{
 					if(filenum == 1)
 					{
-				
-						lseek(openfd,0,SEEK_SET);
+						if(fileindex >= MAXINUM)
+						{
+							fileindex = 0;
+						}										
 					}
 					else
 					{
@@ -68,7 +77,6 @@ void writelog(char *buf)
 						printf("remove one file\n");
 					}
 				}
-				
 				filenum = 0;
 				
 			}
@@ -92,7 +100,7 @@ void makefile(char *newfile)
 	ctime = time(NULL);
 	
 	tm = localtime(&ctime);
-	sprintf(newfile,"%s%2d_%2d_%2.2d-%2.2d:%2.2d:%2.2d",PATH,tm->tm_year+1900,tm->tm_mon+1,tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);//将时间转换为字符串
+	sprintf(newfile,"%s%2d_%2.2d_%2.2d-%2.2d:%2.2d:%2.2d",PATH,tm->tm_year+1900,tm->tm_mon+1,tm->tm_mday,tm->tm_hour,tm->tm_min,tm->tm_sec);//将时间转换为字符串
 	int newfilefd = creat(newfile,777);//创建目标文件
 }
 
@@ -150,38 +158,45 @@ int filesizectrl()
 void sigfunc(int a)
 {
 	char cmd[125];
-	write(openfd,buf,savesize);
 	printf("now write log to file\n");
-	readsize = 0;
-	savesize = 0;
-	memset(buf,'\0',sizeof(buf));
-			
+        openfd = fopen(newfile,"r+");
+        fseek(openfd,fileindex,SEEK_SET);
+        int writenum = fwrite(buf,1,savesize,openfd);
+        printf("writenum is %d\n",writenum);
+        fileindex = ftell(openfd);
+        fclose(openfd);
+
+        readsize = 0;
+        savesize = 0;
+        memset(buf,0,BUFSIZE);			
+
 	int filesize = filesizectrl();
-	if(filesize > MAXINUM)
-	{
-		if(filenum == 1)
-		{			
-			lseek(openfd,0,SEEK_SET);
-		}
-		else
-		{
-			sprintf(cmd,"rm %s$(ls %s -rt | sed -n '1p')",PATH,PATH);
-			system(cmd);
-		}
-	}
-	filenum = 0;
+        if(filesize >= MAXINUM)
+        {
+	        if(filenum == 1)
+                {
+        	        if(fileindex >= MAXINUM)
+                        {
+               		        fileindex = 0;
+                        }
+                }
+                else
+                {
+	                sprintf(cmd,"rm %s$(ls %s -rt | sed -n '1p')",PATH,PATH);
+        	        system(cmd);
+	                printf("remove one file\n");
+                }
+       }
+                filenum = 0;
 }
 
 int main()
 {
-	char newfile[50];
 	makefile(newfile);
 	buf = (char *)malloc((BUFSIZE));
-	openfd = open(newfile,O_RDWR | O_CREAT,0755);
 	signal(SIGINT,sigfunc);
 	writelog(buf);
 			
 	free(buf);
 	return 0;
 }
-
