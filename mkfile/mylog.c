@@ -28,8 +28,63 @@ long fileindex = 0;
 void makefile(char *newfile);
 void writelog(char *buf);
 int filesizectrl();
+int removeoldfile();
 
+int removeoldfile()
+{
+        DIR *d;
+        struct OLDERFILE{
+                long mtime;
+                char filename[50];
+        }olderfile;
+        struct dirent *de;
+        char fname[50];
+        struct stat filebuf;
+        int findnum = 0;
+        d = opendir(PATH);
+        long mtime = 0;
+        if(d == NULL)
+        {
+                perror("prsize");
+                exit(1);
+        }
 
+        while((de = readdir(d))!=NULL)
+        {
+		if(strncmp(de->d_name,".",1) == 0)
+                        continue;
+                sprintf(fname,"%s%s",PATH,de->d_name);
+		if(strcmp(fname,newfile) == 0)
+			continue;
+                int exists = stat(fname,&filebuf);
+                if(exists < 0)
+                {
+                        fprintf(stderr,"Could not stat %s\n",de->d_name);
+                }
+                else
+                {
+                        if(findnum == 0)
+                        {
+                                olderfile.mtime = filebuf.st_mtime;
+                                sprintf(olderfile.filename,"%s%s",PATH,de->d_name);
+                                findnum ++;
+                        }
+                        else
+                        {
+                                if(filebuf.st_mtime<olderfile.mtime)
+                                {
+                                        olderfile.mtime = filebuf.st_mtime;
+                                        sprintf(olderfile.filename,"%s%s",PATH,de->d_name);
+                                }
+                                findnum ++;
+                        }
+                        printf("%s:file->st_mtime is%d\n",de->d_name,filebuf.st_mtime);
+                }
+        }      
+        printf("now remove %s\n",olderfile.filename);
+        remove(olderfile.filename);
+        return 0;
+}
 
 void writelog(char *buf)
 {
@@ -72,9 +127,10 @@ void writelog(char *buf)
 					}
 					else
 					{
-						sprintf(cmd,"rm %s$(ls %s -rt | sed -n '1p')",PATH,PATH);
-						system(cmd);
-						printf("remove one file\n");
+						//sprintf(cmd,"rm %s$(ls %s -rt | sed -n '1p')",PATH,PATH);
+						//system(cmd);
+						//printf("remove one file\n");
+						removeoldfile();
 					}
 				}
 				filenum = 0;
@@ -182,9 +238,10 @@ void sigfunc(int a)
                 }
                 else
                 {
-	                sprintf(cmd,"rm %s$(ls %s -rt | sed -n '1p')",PATH,PATH);
-        	        system(cmd);
-	                printf("remove one file\n");
+	                //sprintf(cmd,"rm %s$(ls %s -rt | sed -n '1p')",PATH,PATH);
+        	        //system(cmd);
+	                //printf("remove one file\n");
+			removeoldfile();
                 }
        }
                 filenum = 0;
